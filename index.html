@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Friends Chat & Calls — Firebase SPA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#f0f2f5; --header:#005c97; --accent:#34B7F1; --btn:#008069; --text:#111b21; --muted:#667781; --border:#e9edef;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Roboto,Arial;background:#d1d7db}
+    #app-root{height:100%;display:flex;align-items:center;justify-content:center;padding:12px}
+    #app-container{width:100%;max-width:450px;height:94vh;background:white;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 30px rgba(17,27,33,0.12)}
+    .view{display:flex;flex-direction:column;height:100%}
+    .main-header{background:var(--header);color:white;padding:12px;display:flex;flex-direction:column}
+    .header-top{display:flex;justify-content:space-between;align-items:center}
+    .nav{display:flex;gap:8px;margin-top:8px}
+    .nav .tab{flex:1;padding:8px;border-radius:8px;text-align:center;color:rgba(255,255,255,0.9);cursor:pointer}
+    .nav .tab.active{border-bottom:3px solid var(--accent)}
+    .panel{flex:1;overflow:auto;padding:12px;background:var(--bg)}
+    .list-item{display:flex;gap:12px;padding:10px;border-radius:8px;background:white;margin-bottom:10px;border:1px solid var(--border);align-items:center}
+    .emoji-box{width:48px;height:48px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:white;font-weight:700}
+    .item-body{flex:1}
+    .item-title{font-weight:600;color:var(--text)}
+    .item-sub{font-size:13px;color:var(--muted)}
+    .btn{padding:8px 10px;border-radius:8px;border:0;background:var(--btn);color:white;cursor:pointer}
+    .btn.secondary{background:#6b7280}
+    .input{width:100%;padding:10px;border-radius:8px;border:1px solid #d1d5db;margin:8px 0}
+    .muted{color:var(--muted);font-size:13px}
+    .chat-overlay{position:absolute;inset:0;background:linear-gradient(180deg,white,#f7f7f7);display:none;z-index:30}
+    .chat-header{display:flex;align-items:center;gap:12px;padding:10px;border-bottom:1px solid var(--border);background:white}
+    .chat-messages{flex:1;padding:14px;overflow:auto;background:#e5ddd5 url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23bdbdbd' fill-opacity='0.15' fill-rule='evenodd'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E") repeat;}
+    .message-bubble{display:inline-block;padding:10px 12px;border-radius:14px;margin:6px 0;max-width:72%}
+    .message-sent{margin-left:auto;background:#e1f6fb}
+    .message-received{margin-right:auto;background:#ffffff}
+    .chat-input-container{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);background:white}
+    .chat-input{flex:1;border-radius:20px;border:1px solid var(--border);padding:10px}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:80}
+    .modal .content{background:white;padding:16px;border-radius:10px;width:92%;max-width:420px;border:1px solid var(--border)}
+    .call-view{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:90}
+    .call-panel{width:92%;max-width:720px;height:80%;background:black;border-radius:8px;position:relative;display:flex;flex-direction:column;overflow:hidden}
+    #remote-video{flex:1;background:black}
+    #local-video{width:160px;height:120px;border-radius:8px;position:absolute;right:12px;bottom:12px;border:3px solid rgba(255,255,255,0.7);object-fit:cover}
+    .small-muted{font-size:13px;color:var(--muted)}
+    .badge{background:#ff4d4f;color:white;padding:2px 6px;border-radius:12px;font-size:12px}
+  </style>
+</head>
+<body>
+  <div id="app-root">
+    <div id="app-container">
+
+      <!-- AUTH VIEW -->
+      <div id="auth-view" class="view" style="display:flex;align-items:center;justify-content:center">
+        <div style="padding:18px;width:100%;max-width:380px">
+          <div style="background:white;padding:16px;border-radius:10px;border:1px solid var(--border)">
+            <h2 style="margin:0 0 6px 0">CallingApp</h2>
+            <p class="small-muted">Signup (email + username) or login to continue</p>
+            <input id="signup-username" class="input" placeholder="username (unique)" />
+            <input id="signup-email" class="input" placeholder="email" type="email" />
+            <input id="signup-password" class="input" placeholder="password" type="password" />
+            <div style="display:flex;gap:8px">
+              <button id="signup-btn" class="btn">Sign up</button>
+              <button id="goto-login" class="btn secondary">Already? Login</button>
+            </div>
+            <div id="signup-error" class="small-muted" style="color:#b91c1c"></div>
+            <hr />
+            <h4 style="margin:8px 0 6px 0">Login</h4>
+            <input id="login-email" class="input" placeholder="email" type="email" />
+            <input id="login-password" class="input" placeholder="password" type="password" />
+            <div style="display:flex;gap:8px">
+              <button id="login-btn" class="btn">Login</button>
+              <button id="clear-btn" class="btn secondary">Clear</button>
+            </div>
+            <div id="login-error" class="small-muted" style="color:#b91c1c"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MAIN VIEW -->
+      <div id="main-view" class="view" style="display:none;position:relative">
+        <header class="main-header">
+          <div class="header-top">
+            <div style="font-weight:700">CallingApp</div>
+            <div style="display:flex;gap:8px">
+              <button id="add-friend-btn" class="btn secondary">Add Friend</button>
+              <button id="menu-btn" class="btn">Profile</button>
+            </div>
+          </div>
+          <div class="nav">
+            <div id="tab-chats" class="tab active">Chats <span id="badge-chats" class="badge" style="display:none"></span></div>
+            <div id="tab-reqs" class="tab">Requests <span id="badge-reqs" class="badge" style="display:none"></span></div>
+            <div id="tab-calls" class="tab">Calls <span id="badge-calls" class="badge" style="display:none"></span></div>
+          </div>
+        </header>
+
+        <main style="flex:1;display:flex;overflow:hidden">
+          <section id="panel-chats" class="panel" style="display:block">
+            <h4 style="margin-top:0">Contacts</h4>
+            <div id="contacts-list"></div>
+          </section>
+          <section id="panel-reqs" class="panel" style="display:none">
+            <h4 style="margin-top:0">Friend Requests</h4>
+            <div id="requests-list"></div>
+          </section>
+          <section id="panel-calls" class="panel" style="display:none">
+            <h4 style="margin-top:0">Call Logs</h4>
+            <div id="calls-list" class="small-muted">No calls yet</div>
+          </section>
+        </main>
+
+        <!-- Chat overlay -->
+        <div id="chat-overlay" class="chat-overlay" style="display:none;position:absolute;inset:0;z-index:40">
+          <div style="display:flex;flex-direction:column;height:100%">
+            <div class="chat-header">
+              <button id="chat-back" class="btn secondary">Back</button>
+              <div id="chat-title" style="font-weight:600"></div>
+              <div style="margin-left:auto;display:flex;gap:8px">
+                <button id="call-audio" class="btn secondary">Voice</button>
+                <button id="call-video" class="btn">Video</button>
+              </div>
+            </div>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-container">
+              <input id="chat-input" class="chat-input" placeholder="Type a message" />
+              <button id="chat-send" class="btn">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Call view -->
+        <div id="call-view" class="call-view">
+          <div class="call-panel">
+            <div id="remote-video" style="background:black"></div>
+            <video id="local-video" autoplay muted playsinline></video>
+            <div style="position:absolute;left:10px;top:10px;color:white;z-index:10"><strong id="caller-name">Call</strong></div>
+            <div style="position:absolute;right:10px;bottom:10px;z-index:10">
+              <button id="end-call" class="btn" style="background:#e91e63">End</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- MODALS -->
+      <div id="add-friend-modal" class="modal"><div class="content">
+        <h3>Add Friend</h3>
+        <p class="small-muted">Enter friend's username</p>
+        <input id="add-friend-username" class="input" placeholder="friend's username" />
+        <div style="display:flex;gap:8px">
+          <button id="send-request-btn" class="btn">Send Request</button>
+          <button id="cancel-addfriend" class="btn secondary">Cancel</button>
+        </div>
+        <div id="add-friend-error" class="small-muted" style="color:#b91c1c"></div>
+      </div></div>
+
+      <div id="profile-modal" class="modal"><div class="content">
+        <h3>Your Profile</h3>
+        <p><strong>Username:</strong> <span id="pv-username">—</span></p>
+        <p><strong>Email:</strong> <span id="pv-email">—</span></p>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="logout" class="btn" style="background:#ef4444">Logout</button>
+          <button id="close-pv" class="btn secondary">Close</button>
+        </div>
+      </div></div>
+
+      <div id="incoming-request-modal" class="modal"><div class="content">
+        <h3>New Friend Request</h3>
+        <p id="incoming-from" class="small-muted"></p>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="accept-req-btn" class="btn">Accept</button>
+          <button id="reject-req-btn" class="btn secondary">Reject</button>
+        </div>
+      </div></div>
+
+      <div id="incoming-call-modal" class="modal"><div class="content">
+        <h3>Incoming Call</h3>
+        <p id="incoming-call-from" class="small-muted"></p>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="accept-call" class="btn">Accept</button>
+          <button id="reject-call" class="btn secondary">Reject</button>
+        </div>
+      </div></div>
+
+      <!-- ringtone -->
+      <audio id="ringtone" loop>
+        <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=" type="audio/wav">
+      </audio>
+
+    </div>
+  </div>
+
+  <!-- Firebase v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <script>
+  /*******************
+   * Replace with your Firebase config (exact values)
+   *******************/
+  const firebaseConfig = {
+  apiKey: "AIzaSyA1PX3bL6lB3a698Y4R5aZHYNGw06fwEOU",
+  authDomain: "masab-tech-app.firebaseapp.com",
+  databaseURL: "https://masab-tech-app-default-rtdb.firebaseio.com",
+  projectId: "masab-tech-app",
+  storageBucket: "masab-tech-app.firebasestorage.app",
+  messagingSenderId: "274182026908",
+  appId: "1:274182026908:web:c48f4caaf779af2a6d5f59"
+};
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  // helpers
+  const $ = id => document.getElementById(id);
+  const toKey = s => s.trim().toLowerCase();
+  const chatIdFor = (a,b) => [a,b].sort().join('_');
+
+  // UI elements
+  const authView = $('auth-view'), mainView = $('main-view');
+  const signupUsername = $('signup-username'), signupEmail = $('signup-email'), signupPassword = $('signup-password'), signupBtn = $('signup-btn'), signupError = $('signup-error');
+  const loginEmail = $('login-email'), loginPassword = $('login-password'), loginBtn = $('login-btn'), loginError = $('login-error'), clearBtn = $('clear-btn');
+  const addFriendModal = $('add-friend-modal'), addFriendBtn = $('add-friend-btn'), sendRequestBtn = $('send-request-btn'), cancelAddFriend = $('cancel-addfriend'), addFriendUsername = $('add-friend-username'), addFriendError = $('add-friend-error');
+  const profileModal = $('profile-modal'), menuBtn = $('menu-btn'), pvUsername = $('pv-username'), pvEmail = $('pv-email'), logoutBtn = $('logout'), closePv = $('close-pv');
+  const requestsList = $('requests-list'), contactsList = $('contacts-list'), badgeReqs = $('badge-reqs'), badgeChats = $('badge-chats');
+  const incomingRequestModal = $('incoming-request-modal'), incomingFrom = $('incoming-from'), acceptReqBtn = $('accept-req-btn'), rejectReqBtn = $('reject-req-btn');
+  const chatOverlay = $('chat-overlay'), chatBack = $('chat-back'), chatTitle = $('chat-title'), chatMessages = $('chat-messages'), chatInput = $('chat-input'), chatSend = $('chat-send');
+  const callView = $('call-view'), localVideo = $('local-video'), remoteVideo = $('remote-video'), callerName = $('caller-name'), endCallBtn = $('end-call');
+  const ringtone = $('ringtone');
+  const incomingCallModal = $('incoming-call-modal'), incomingCallFrom = $('incoming-call-from'), acceptCallBtn = $('accept-call'), rejectCallBtn = $('reject-call');
+  const tabChats = $('tab-chats'), tabReqs = $('tab-reqs'), tabCalls = $('tab-calls');
+  const panelChats = $('panel-chats'), panelReqs = $('panel-reqs'), panelCalls = $('panel-calls');
+
+  // state
+  let currentUser = null;
+  let currentProfile = null; // {uid, username, email}
+  let activeRequestKey = null; // for incoming request modal
+  let currentChatPartner = null; // {uid, username}
+  let pc = null, localStream = null, activeCallId = null, callRole = null;
+
+  // -------------------- AUTH --------------------
+  signupBtn.addEventListener('click', async ()=>{
+    signupError.textContent=''; const raw = signupUsername.value.trim(); const key = toKey(raw);
+    const email = signupEmail.value.trim(), pass = signupPassword.value;
+    if(!key){ signupError.textContent='Username required'; return; }
+    if(!/^[a-z0-9\-_]+$/.test(key)){ signupError.textContent='Allowed: letters, numbers, - _'; return; }
+    if(!email){ signupError.textContent='Email required'; return; }
+    if(!pass || pass.length < 6){ signupError.textContent='Password >= 6 chars'; return; }
+
+    try{
+      // ensure username not taken
+      const snap = await db.ref('usernames/' + key).once('value');
+      if(snap.exists()){ signupError.textContent='Username taken'; return; }
+
+      const userCred = await auth.createUserWithEmailAndPassword(email, pass);
+      const uid = userCred.user.uid;
+
+      const updates = {};
+      updates['/users/' + uid] = { uid, username: key, email, createdAt: Date.now() };
+      updates['/usernames/' + key] = uid;
+      await db.ref().update(updates);
+
+      // state handled by onAuthStateChanged
+    }catch(err){ console.error(err); signupError.textContent = err.message || 'Signup failed'; }
+  });
+
+  loginBtn.addEventListener('click', async ()=> {
+    loginError.textContent=''; const e = loginEmail.value.trim(), p = loginPassword.value;
+    if(!e || !p){ loginError.textContent='Email & password required'; return; }
+    try{ await auth.signInWithEmailAndPassword(e,p); }catch(err){ console.error(err); loginError.textContent = err.message || 'Login failed'; }
+  });
+
+  clearBtn.addEventListener('click', ()=> { signupUsername.value = signupEmail.value = signupPassword.value = loginEmail.value = loginPassword.value = ''; signupError.textContent = loginError.textContent = ''; });
+
+  // onAuth change
+  auth.onAuthStateChanged(async user=>{
+    if(user){
+      currentUser = user;
+      // fetch profile
+      const snap = await db.ref('users/' + user.uid).once('value');
+      if(snap.exists()){
+        currentProfile = snap.val();
+      } else {
+        // fallback profile from email
+        currentProfile = { uid: user.uid, username: null, email: user.email };
+      }
+      showMain();
+      attachListeners(); // attach realtime listeners for requests/contacts/calls
+    } else {
+      currentUser = null; currentProfile = null;
+      showAuth();
+      detachListeners();
+    }
+  });
+
+  function showAuth(){ authView.style.display='flex'; mainView.style.display='none'; }
+  function showMain(){ authView.style.display='none'; mainView.style.display='flex'; pvUsername.textContent = currentProfile.username || '—'; pvEmail.textContent = currentProfile.email || '—'; }
+
+  // -------------------- MODALS --------------------
+  addFriendBtn.addEventListener('click', ()=> { addFriendUsername.value = ''; addFriendError.textContent = ''; showModal(addFriendModal); });
+  cancelAddFriend.addEventListener('click', ()=> hideModal(addFriendModal));
+  menuBtn.addEventListener('click', ()=> showModal(profileModal));
+  closePv.addEventListener('click', ()=> hideModal(profileModal));
+  logoutBtn.addEventListener('click', async ()=> { await auth.signOut(); hideModal(profileModal); });
+
+  function showModal(el){ el.style.display = 'flex'; }
+  function hideModal(el){ el.style.display = 'none'; }
+
+  // -------------------- SEND REQUEST (by username) --------------------
+  sendRequestBtn.addEventListener('click', async ()=>{
+    addFriendError.textContent = '';
+    const raw = addFriendUsername.value.trim();
+    const key = toKey(raw);
+    if(!key){ addFriendError.textContent = 'Enter username'; return; }
+    if(!currentProfile || !currentProfile.username){ addFriendError.textContent = 'Profile incomplete'; return; }
+    try{
+      const snap = await db.ref('usernames/' + key).once('value');
+      if(!snap.exists()){ addFriendError.textContent = 'User not found'; return; }
+      const recipientUid = snap.val();
+      if(recipientUid === currentProfile.uid){ addFriendError.textContent = 'Cannot add yourself'; return; }
+      const already = await db.ref('contacts/' + currentProfile.uid + '/' + recipientUid).once('value');
+      if(already.exists()){ addFriendError.textContent = 'Already a contact'; return; }
+
+      // check existing pending (from me to them)
+      const existing = await db.ref('requests/' + recipientUid).orderByChild('fromUid').equalTo(currentProfile.uid).once('value');
+      if(existing.exists()){ addFriendError.textContent = 'Request already sent'; return; }
+
+      // create request: requests/{recipientUid}/{pushId}
+      const reqRef = db.ref('requests/' + recipientUid).push();
+      await reqRef.set({ fromUid: currentProfile.uid, fromUsername: currentProfile.username, ts: Date.now(), status: 'pending' });
+
+      addFriendError.textContent = 'Request sent';
+      setTimeout(()=> hideModal(addFriendModal), 800);
+    }catch(err){ console.error('send request', err); addFriendError.textContent = err.message || 'Error'; }
+  });
+
+  // -------------------- REALTIME LISTENERS --------------------
+  let reqListener = null, contactsListener = null, callsListener = null, unreadListener = null;
+  function attachListeners(){
+    if(!currentProfile) return;
+
+    // REQUESTS: child_added to show incoming notification instantly
+    const myReqRef = db.ref('requests/' + currentProfile.uid);
+    myReqRef.off();
+    myReqRef.on('child_added', snap => {
+      const data = snap.val(); const reqKey = snap.key;
+      // Show incoming popup (non-blocking)
+      incomingFrom.textContent = 'From: ' + (data.fromUsername || 'Unknown');
+      activeRequestKey = reqKey;
+      showModal(incomingRequestModal);
+      ringtone.play().catch(()=>{});
+      // also refresh requests list
+      renderRequests();
+    });
+    myReqRef.on('child_removed', snap => {
+      // update UI when request removed (accepted/rejected)
+      renderRequests();
+    });
+
+    // also render initial list and update on value changes
+    renderRequests();
+
+    // CONTACTS listener
+    const contactsRef = db.ref('contacts/' + currentProfile.uid);
+    contactsRef.off();
+    contactsRef.on('value', snap => {
+      // render contacts list
+      renderContacts(snap);
+    });
+
+    // unread counts
+    const unreadRef = db.ref('unreadCounts/' + currentProfile.uid);
+    unreadRef.off();
+    unreadRef.on('value', snap=>{
+      let total = 0;
+      snap.forEach(s=> total += 1); // simple count of chats with unread
+      const badge = $('badge-chats');
+      badge.style.display = total ? 'inline-block' : 'none';
+      badge.textContent = total;
+    });
+
+    // incoming calls listener (child_added)
+    const callsRef = db.ref('calls/' + currentProfile.uid);
+    callsRef.off();
+    callsRef.on('child_added', snap=>{
+      const callData = snap.val(); const callId = snap.key;
+      if(activeCallId) return; // busy
+      // show incoming call modal
+      incomingCallFrom.textContent = 'From: ' + (callData.fromUsername || 'Unknown');
+      showModal(incomingCallModal);
+      ringtone.play().catch(()=>{});
+      // wire accept/reject handlers (each one should only run once)
+      const once = {done:false};
+      acceptCallBtn.onclick = async ()=> {
+        if(once.done) return; once.done=true;
+        hideModal(incomingCallModal); ringtone.pause(); ringtone.currentTime = 0;
+        await acceptCall(callId, callData);
+      };
+      rejectCallBtn.onclick = async ()=> {
+        if(once.done) return; once.done=true;
+        hideModal(incomingCallModal); ringtone.pause(); ringtone.currentTime = 0;
+        // remove the call node (caller will see)
+        await db.ref('calls/' + currentProfile.uid + '/' + callId).remove().catch(()=>{});
+      };
+    });
+
+    // initial badge counts for requests
+    db.ref('requests/' + currentProfile.uid).once('value').then(s=>{
+      const c = s.numChildren();
+      const b = $('badge-reqs'); b.style.display = c ? 'inline-block' : 'none'; b.textContent = c;
+    });
+  }
+
+  function detachListeners(){
+    if(currentProfile){
+      db.ref('requests/' + currentProfile.uid).off();
+      db.ref('contacts/' + currentProfile.uid).off();
+      db.ref('calls/' + currentProfile.uid).off();
+      db.ref('unreadCounts/' + currentProfile.uid).off();
+    }
+  }
+
+  // --------------- RENDER REQUESTS ----------------
+  async function renderRequests(){
+    clear( requestsList );
+    const snap = await db.ref('requests/' + currentProfile.uid).once('value');
+    let count = 0;
+    snap.forEach(s=>{
+      count++;
+      const data = s.val(); const reqId = s.key;
+      const div = make('div','list-item');
+      div.innerHTML = `<div class="item-body"><div class="item-title">${data.fromUsername}</div><div class="item-sub">Sent a friend request</div></div>`;
+      const accept = make('button','btn'); accept.textContent='Accept';
+      const reject = make('button','btn'); reject.style.background='#ef4444'; reject.textContent='Reject';
+      const right = make('div'); right.style.marginLeft='auto'; right.style.display='flex'; right.style.gap='6px';
+      right.appendChild(accept); right.appendChild(reject); div.appendChild(right);
+      requestsList.appendChild(div);
+
+      accept.addEventListener('click', async ()=>{
+        // accept: add mutual contacts, remove request
+        const fromUid = data.fromUid;
+        const updates = {};
+        updates['/contacts/' + currentProfile.uid + '/' + fromUid] = { uid: fromUid, username: data.fromUsername, addedAt: Date.now() };
+        updates['/contacts/' + fromUid + '/' + currentProfile.uid] = { uid: currentProfile.uid, username: currentProfile.username, addedAt: Date.now() };
+        updates['/requests/' + currentProfile.uid + '/' + reqId] = null;
+        await db.ref().update(updates);
+      });
+
+      reject.addEventListener('click', async ()=> {
+        await db.ref('requests/' + currentProfile.uid + '/' + reqId).remove();
+      });
+    });
+    const b = $('badge-reqs'); b.style.display = count ? 'inline-block' : 'none'; b.textContent = count;
+  }
+
+  // --------------- RENDER CONTACTS ----------------
+  function renderContacts(snapshot){
+    clear(contactsList);
+    let count = 0;
+    snapshot.forEach(s=>{
+      count++;
+      const c = s.val();
+      const div = make('div','list-item');
+      div.innerHTML = `<div class="emoji-box">${c.username.slice(0,2).toUpperCase()}</div><div class="item-body"><div class="item-title">${c.username}</div><div class="item-sub">Tap to chat or call</div></div>`;
+      const open = make('button','btn'); open.textContent='Chat';
+      const call = make('button','btn'); call.style.background='#6b7280'; call.textContent='Call';
+      const right = make('div'); right.style.marginLeft='auto'; right.style.display='flex'; right.style.gap='6px';
+      right.appendChild(open); right.appendChild(call); div.appendChild(right);
+      contactsList.appendChild(div);
+
+      open.addEventListener('click', ()=> openChat({ uid: c.uid, username: c.username }));
+      call.addEventListener('click', ()=> startCall({ uid: c.uid, username: c.username }, true));
+    });
+    const b = $('badge-chats'); b.style.display = count ? 'inline-block' : 'none'; b.textContent = count;
+  }
+
+  // -------------------- Simple util --------------------
+  function make(tag, cls){ const e = document.createElement(tag); if(cls) e.className = cls; return e; }
+  function clear(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+
+  // -------------------- Chat --------------------
+  async function openChat(partner){
+    currentChatPartner = partner;
+    chatTitle.textContent = partner.username;
+    chatMessages.innerHTML = '';
+    chatOverlay.style.display = 'block';
+
+    const cid = chatIdFor(currentProfile.uid, partner.uid);
+    const msgRef = db.ref('chats/' + cid + '/messages');
+    msgRef.off();
+    msgRef.on('child_added', snap=>{
+      const m = snap.val();
+      const d = make('div','message-bubble ' + (m.from === currentProfile.uid ? 'message-sent' : 'message-received'));
+      d.textContent = m.text;
+      chatMessages.appendChild(d);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      // clear unread
+      if(m.from !== currentProfile.uid){
+        db.ref('unreadCounts/' + currentProfile.uid + '/' + cid).remove().catch(()=>{});
+      }
+    });
+
+    chatSend.onclick = async ()=>{
+      const text = chatInput.value.trim(); if(!text) return;
+      const m = { text, from: currentProfile.uid, to: partner.uid, ts: Date.now() };
+      await db.ref('chats/' + cid + '/messages').push(m);
+      // set unread for recipient (simple)
+      await db.ref('unreadCounts/' + partner.uid + '/' + cid).set({ count: 1, lastMsg: text, ts: Date.now() });
+      chatInput.value = '';
+    };
+  }
+
+  chatBack.addEventListener('click', ()=> { chatOverlay.style.display = 'none'; currentChatPartner = null; });
+
+  // -------------------- CALLS (WebRTC signaling) --------------------
+  const servers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+  async function startCall(target, useVideo){
+    if(!currentProfile) return;
+    const callRef = db.ref('calls/' + target.uid).push();
+    const callId = callRef.key;
+    activeCallId = callId; callRole = 'caller';
+    try{
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: useVideo });
+    }catch(err){ alert('Camera/mic permission denied'); return; }
+    pc = new RTCPeerConnection(servers);
+    localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+    localVideo.srcObject = localStream; localVideo.play().catch(()=>{});
+
+    const remoteStream = new MediaStream();
+    pc.ontrack = e => {
+      e.streams[0].getTracks().forEach(t=> remoteStream.addTrack(t));
+      remoteVideo.innerHTML=''; const v = document.createElement('video'); v.autoplay=true; v.playsInline=true; v.srcObject = remoteStream; v.style.width='100%'; remoteVideo.appendChild(v); v.play().catch(()=>{});
+    };
+
+    const iceRef = db.ref('iceCandidates/' + callId + '/caller');
+    pc.onicecandidate = e => { if(e.candidate) iceRef.push(e.candidate.toJSON()).catch(()=>{}); };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await callRef.set({ fromUid: currentProfile.uid, fromUsername: currentProfile.username, offer: offer.toJSON(), createdAt: Date.now(), type: useVideo ? 'video' : 'audio' });
+
+    // listen for answer
+    const answerRef = db.ref('calls/' + target.uid + '/' + callId + '/answer');
+    answerRef.on('value', async snap => {
+      if(snap.exists()){
+        const answer = snap.val();
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      }
+    });
+
+    // listen for callee ICE
+    const calleeIceRef = db.ref('iceCandidates/' + callId + '/callee');
+    calleeIceRef.on('child_added', snap => { const c = snap.val(); pc.addIceCandidate(new RTCIceCandidate(c)).catch(e=>console.warn(e)); });
+
+    // show call UI
+    callerName.textContent = 'Calling ' + target.username;
+    callView.style.display = 'flex';
+  }
+
+  async function acceptCall(callId, callData){
+    // called when receiving incoming call (we're callee)
+    activeCallId = callId; callRole = 'callee';
+    hideModal(incomingCallModal); ringtone.pause(); ringtone.currentTime = 0;
+    try{
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: callData.type === 'video' });
+    }catch(err){ alert('Camera/mic denied'); return; }
+
+    pc = new RTCPeerConnection(servers);
+    localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+    localVideo.srcObject = localStream; localVideo.play().catch(()=>{});
+
+    const remoteStream = new MediaStream();
+    pc.ontrack = e => {
+      e.streams[0].getTracks().forEach(t=> remoteStream.addTrack(t));
+      remoteVideo.innerHTML=''; const v = document.createElement('video'); v.autoplay=true; v.playsInline=true; v.srcObject = remoteStream; v.style.width='100%'; remoteVideo.appendChild(v); v.play().catch(()=>{});
+    };
+
+    const iceRef = db.ref('iceCandidates/' + callId + '/callee');
+    pc.onicecandidate = e => { if(e.candidate) iceRef.push(e.candidate.toJSON()).catch(()=>{}); };
+
+    await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    // write answer to caller's call node: calls/{callerUid}/{callId}/answer
+    const callerUid = callData.fromUid;
+    await db.ref('calls/' + callerUid + '/' + callId + '/answer').set(answer.toJSON());
+
+    // listen for caller ice
+    const callerIceRef = db.ref('iceCandidates/' + callId + '/caller');
+    callerIceRef.on('child_added', snap=> { const c = snap.val(); pc.addIceCandidate(new RTCIceCandidate(c)).catch(e=>console.warn(e)); });
+
+    // show call UI
+    callerName.textContent = 'In call with ' + (callData.fromUsername || 'User');
+    callView.style.display = 'flex';
+  }
+
+  // wire accept/reject request modal buttons
+  acceptReqBtn.addEventListener('click', async ()=>{
+    if(!activeRequestKey) { hideModal(incomingRequestModal); return; }
+    // get request data
+    const snap = await db.ref('requests/' + currentProfile.uid + '/' + activeRequestKey).once('value');
+    if(!snap.exists()){ hideModal(incomingRequestModal); ringtone.pause(); ringtone.currentTime=0; return; }
+    const data = snap.val(); const fromUid = data.fromUid;
+    const updates = {};
+    updates['/contacts/' + currentProfile.uid + '/' + fromUid] = { uid: fromUid, username: data.fromUsername, addedAt: Date.now() };
+    updates['/contacts/' + fromUid + '/' + currentProfile.uid] = { uid: currentProfile.uid, username: currentProfile.username, addedAt: Date.now() };
+    updates['/requests/' + currentProfile.uid + '/' + activeRequestKey] = null;
+    await db.ref().update(updates);
+    hideModal(incomingRequestModal); ringtone.pause(); ringtone.currentTime = 0;
+  });
+
+  rejectReqBtn.addEventListener('click', async ()=>{
+    if(!activeRequestKey){ hideModal(incomingRequestModal); return; }
+    await db.ref('requests/' + currentProfile.uid + '/' + activeRequestKey).remove();
+    hideModal(incomingRequestModal); ringtone.pause(); ringtone.currentTime = 0;
+  });
+
+  // accept/reject incoming call wired earlier on attachListeners
+  acceptCallBtn.addEventListener('click', ()=>{}); // handler set when call arrives
+  rejectCallBtn.addEventListener('click', ()=>{});  // handler set when call arrives
+
+  // end call
+  endCallBtn.addEventListener('click', async ()=>{
+    await endCall();
+  });
+
+  async function endCall(){
+    if(pc){ try{ pc.close(); }catch(e){} pc=null; }
+    if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+    callView.style.display = 'none';
+    remoteVideo.innerHTML = ''; localVideo.srcObject = null;
+    if(activeCallId){
+      // cleanup DB nodes
+      await db.ref('iceCandidates/' + activeCallId).remove().catch(()=>{});
+      await db.ref('calls/' + currentProfile.uid + '/' + activeCallId).remove().catch(()=>{});
+      // attempt removal under other users
+      const allCalls = await db.ref('calls').once('value');
+      allCalls.forEach(child=>{
+        if(child.hasChild(activeCallId)) child.ref.child(activeCallId).remove().catch(()=>{});
+      });
+    }
+    activeCallId = null; callRole = null;
+  }
+
+  // -------------------- UI switching --------------------
+  tabChats.addEventListener('click', ()=> switchPanel('chats'));
+  tabReqs.addEventListener('click', ()=> switchPanel('reqs'));
+  tabCalls.addEventListener('click', ()=> switchPanel('calls'));
+  function switchPanel(p){
+    tabChats.classList.remove('active'); tabReqs.classList.remove('active'); tabCalls.classList.remove('active');
+    panelChats.style.display = panelReqs.style.display = panelCalls.style.display = 'none';
+    if(p==='chats'){ tabChats.classList.add('active'); panelChats.style.display='block'; }
+    if(p==='reqs'){ tabReqs.classList.add('active'); panelReqs.style.display='block'; }
+    if(p==='calls'){ tabCalls.classList.add('active'); panelCalls.style.display='block'; }
+  }
+
+  // -------------------- Helpers --------------------
+  function hideAllModals(){ document.querySelectorAll('.modal').forEach(m=>m.style.display='none'); ringtone.pause(); ringtone.currentTime=0; activeRequestKey=null; }
+  function showIncomingRequestUI(data, key){ incomingFrom.textContent = 'From: ' + (data.fromUsername || 'Unknown'); activeRequestKey = key; showModal(incomingRequestModal); ringtone.play().catch(()=>{}); }
+
+  // safe cleanup
+  window.addEventListener('beforeunload', ()=> { if(pc) try{ pc.close(); }catch(e){} if(localStream) localStream.getTracks().forEach(t=>t.stop()); });
+
+  </script>
+</body>
+</html>
